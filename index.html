@@ -874,9 +874,11 @@
 
     <script>
         // --- КОНФИГУРАЦИЯ ---
-        const OPENROUTER_API_KEY = "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";
+        // Если вы не планируете использовать ИИ, можно установить эту переменную в false
+        const ENABLE_AI_FEATURES = false; 
+        const OPENROUTER_API_KEY = ""; // Оставляем пустым, так как возникли проблемы с аутентификацией
         const OPENROUTER_MODEL = "google/gemini-flash-1.5";
-        const YOUR_SITE_NAME_FOR_OPENROUTER = "ExperimentStudyRu"; 
+        const YOUR_SITE_NAME_FOR_OPENROUTER = "ExperimentStudyRu";
 
         // --- ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ---
         let currentStageId = 'stageWelcome';
@@ -1129,6 +1131,35 @@
             sendButton.disabled = true;
             sendButton.textContent = 'ИИ отвечает...';
 
+            // Если функции ИИ отключены, используем заготовленные ответы
+            if (!ENABLE_AI_FEATURES) {
+                setTimeout(() => {
+                    const predefinedResponses = [
+                        "Это интересное мнение. Наука показывает, что существует множество доказательств, подтверждающих научную точку зрения. Возможно, стоит рассмотреть данные с разных сторон?",
+                        "Я понимаю вашу точку зрения. Однако, научные исследования предлагают альтернативное объяснение. Большинство экспертов сходятся во мнении, что основанный на доказательствах подход является наиболее надежным.",
+                        "Это распространенное мнение, но современные научные данные указывают на другие выводы. Критическое мышление и анализ различных источников могут помочь сформировать более полное представление."
+                    ];
+                    
+                    const aiResponse = predefinedResponses[Math.floor(Math.random() * predefinedResponses.length)];
+                    
+                    participantData.llmDialog.push({ round: llmRound, type: 'ai', text: aiResponse, timestamp: new Date().toISOString() });
+                    updateLLMDialogArea(`ИИ: ${aiResponse}`);
+                    
+                    sendButton.textContent = 'Отправить ИИ';
+                    sendButton.style.display = 'none';
+                    
+                    if (llmRound < 3) {
+                        document.getElementById('llmNextRoundButton').style.display = 'inline-block';
+                        document.getElementById('llmNextRoundButton').disabled = false;
+                    } else {
+                        document.getElementById('llmToPostTestButton').style.display = 'inline-block';
+                        document.getElementById('llmToPostTestButton').disabled = false;
+                    }
+                }, 1500); // Имитация задержки ответа ИИ
+                
+                return;
+            }
+
             const messages = [
                 {
                     role: "system",
@@ -1205,28 +1236,68 @@
             // Показываем пользователю, что данные отправляются
             alert("Отправка данных начата...");
             
-            // Создаем копию данных для отправки
+            // Создаем копию данных для отправки - значительно упрощенную
             const dataToSend = {
                 id: participantData.id,
                 timestamp: new Date().toISOString(),
                 group: participantData.assignedGroup || "Не определено",
-                predominantBelief: predominantBelief.topicName,
-                responses: participantData.responses
+                belief: {
+                    topic: predominantBelief.topicName,
+                    text: participantData.responses?.stagePersonalBelief?.personal_belief_text || "",
+                    confidence_pre: participantData.responses?.stagePersonalBelief?.personal_belief_confidence_pre || "",
+                    confidence_post: participantData.responses?.stagePostTest1?.personal_belief_confidence_post1 || ""
+                },
+                // Только основные результаты опросов
+                demographics: participantData.responses?.stageDemographics || {},
+                trust: participantData.responses?.stageTrust || {},
+                npss_pre: participantData.responses?.stageNPSS_pre || {},
+                as_beliefs_pre: participantData.responses?.stageAntiScienceList_pre || {},
+                centrality: participantData.responses?.stageCentrality || {},
+                npss_post: participantData.responses?.stagePostTest1 ? 
+                    Object.keys(participantData.responses.stagePostTest1)
+                        .filter(key => key.startsWith('npss_post'))
+                        .reduce((obj, key) => {
+                            obj[key] = participantData.responses.stagePostTest1[key];
+                            return obj;
+                        }, {}) : {},
+                as_beliefs_post: participantData.responses?.stagePostTest1 ? 
+                    Object.keys(participantData.responses.stagePostTest1)
+                        .filter(key => key.startsWith('as_belief'))
+                        .reduce((obj, key) => {
+                            obj[key] = participantData.responses.stagePostTest1[key];
+                            return obj;
+                        }, {}) : {}
             };
             
+            // Исключаем логи диалогов чтобы уменьшить размер
+            if (participantData.assignedGroup === 'Экспериментальная') {
+                dataToSend.llm_dialog_count = participantData.llmDialog ? participantData.llmDialog.length : 0;
+                // Отправляем только краткую информацию о диалогах, а не весь текст
+                dataToSend.llm_rounds_completed = llmRound;
+            }
+            
             const jsonData = JSON.stringify(dataToSend);
-            console.log("Размер отправляемых данных: " + jsonData.length + " символов");
+            console.log("Размер отправляемых данных: " + jsonData.length + " байт");
+            
+            // Если размер данных слишком большой, сразу переходим к скачиванию
+            if (jsonData.length > 100000) { // ~100KB
+                console.warn("Размер данных слишком большой для отправки");
+                alert("Данные слишком объемные для отправки. Будет выполнено локальное сохранение.");
+                downloadBackup();
+                return;
+            }
             
             // Устанавливаем таймаут в 30 секунд
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 30000);
             
+            // Пробуем отправить данные через формат FormData (более совместимый с Google Apps Script)
+            const formData = new FormData();
+            formData.append('data', jsonData);
+            
             fetch('https://script.google.com/macros/s/AKfycbzbUu4U29vZrop4SNi62SfyVxJ0gFwfgbnP44GRAuWXGz8Yrz2LwsSUDKcW6-a-Fn-O/exec', {
                 method: 'POST',
-                body: jsonData,
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                body: formData,  // Используем FormData вместо прямой отправки JSON
                 signal: controller.signal
             })
             .then(response => {
@@ -1234,11 +1305,24 @@
                 if (!response.ok) {
                     throw new Error(`Ошибка HTTP: ${response.status} ${response.statusText}`);
                 }
-                return response.json();
+                return response.text(); // Обрабатываем как текст вместо JSON для большей надежности
             })
             .then(data => {
-                alert("Данные успешно отправлены! Спасибо за участие!");
-                console.log("Ответ сервера:", data);
+                let success = false;
+                try {
+                    // Пробуем распарсить JSON ответ, если он в таком формате
+                    const jsonResponse = JSON.parse(data);
+                    success = jsonResponse.success === true;
+                } catch (e) {
+                    // Если не JSON, проверяем содержит ли текст успешное сообщение
+                    success = data.includes('success') || data.includes('Success') || data.includes('OK');
+                }
+                
+                if (success) {
+                    alert("Данные успешно отправлены! Спасибо за участие!");
+                } else {
+                    throw new Error("Неизвестный ответ сервера");
+                }
             })
             .catch(error => {
                 clearTimeout(timeoutId);
@@ -1261,8 +1345,8 @@
 
         function downloadBackup() {
             try {
-                const jsonData = JSON.stringify(participantData, null, 2);
-                const blob = new Blob([jsonData], { type: 'application/json' });
+                const fullData = JSON.stringify(participantData, null, 2);
+                const blob = new Blob([fullData], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -1281,11 +1365,10 @@
         // --- ИНИЦИАЛИЗАЦИЯ ---
         document.addEventListener('DOMContentLoaded', () => {
             logData('experiment_start', { userAgent: navigator.userAgent, timestamp: new Date().toISOString() });
-            if (OPENROUTER_API_KEY === "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" || 
-                (OPENROUTER_API_KEY && OPENROUTER_API_KEY.startsWith("sk-or-v1-"))) {
-                console.warn("ПРЕДУПРЕЖДЕНИЕ БЕЗОПАСНОСТИ: API ключ OpenRouter встроен в этот скрипт. Это только для демонстрационных целей и крайне небезопасно для любой производственной или публичной среды.");
-            } else if (!OPENROUTER_API_KEY || OPENROUTER_API_KEY === "YOUR_OPENROUTER_API_KEY_HERE") {
-                console.warn("Отсутствует API ключ OpenRouter или используется заполнитель. Функции ИИ, вероятно, не будут работать.");
+            if (!ENABLE_AI_FEATURES) {
+                console.log("Функции ИИ отключены в настройках.");
+            } else if (!OPENROUTER_API_KEY || OPENROUTER_API_KEY === "") {
+                console.warn("Отсутствует API ключ OpenRouter. Функции ИИ не будут работать с реальным ИИ.");
             }
             updateProgressBar('stageWelcome');
             showStage(currentStageId);

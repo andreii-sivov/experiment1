@@ -1202,39 +1202,80 @@
         }
 
         function exportData() {
-            const jsonData = JSON.stringify(participantData);
             // Показываем пользователю, что данные отправляются
-            alert("Отправка данных...");
+            alert("Отправка данных начата...");
+            
+            // Создаем копию данных для отправки
+            const dataToSend = {
+                id: participantData.id,
+                timestamp: new Date().toISOString(),
+                group: participantData.assignedGroup || "Не определено",
+                predominantBelief: predominantBelief.topicName,
+                responses: participantData.responses
+            };
+            
+            const jsonData = JSON.stringify(dataToSend);
+            console.log("Размер отправляемых данных: " + jsonData.length + " символов");
+            
+            // Устанавливаем таймаут в 30 секунд
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+            
             fetch('https://script.google.com/macros/s/AKfycbzbUu4U29vZrop4SNi62SfyVxJ0gFwfgbnP44GRAuWXGz8Yrz2LwsSUDKcW6-a-Fn-O/exec', {
                 method: 'POST',
                 body: jsonData,
                 headers: {
                     'Content-Type': 'application/json'
-                }
+                },
+                signal: controller.signal
             })
-            .then(response => response.json())
+            .then(response => {
+                clearTimeout(timeoutId);
+                if (!response.ok) {
+                    throw new Error(`Ошибка HTTP: ${response.status} ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 alert("Данные успешно отправлены! Спасибо за участие!");
+                console.log("Ответ сервера:", data);
             })
             .catch(error => {
-                console.error('Ошибка:', error);
-                alert("Произошла ошибка при отправке. Пожалуйста, скачайте данные и отправьте их вручную.");
-                // Запасной вариант - скачать файл
+                clearTimeout(timeoutId);
+                console.error('Ошибка при отправке:', error);
+                
+                let errorMessage = "Произошла ошибка при отправке данных.\n\n";
+                
+                if (error.name === 'AbortError') {
+                    errorMessage += "Превышено время ожидания (30 секунд). Сервер не ответил вовремя.";
+                } else {
+                    errorMessage += "Детали ошибки: " + error.message;
+                }
+                
+                errorMessage += "\n\nДанные будут скачаны на ваше устройство. Пожалуйста, отправьте файл организатору исследования.";
+                
+                alert(errorMessage);
                 downloadBackup();
             });
         }
 
         function downloadBackup() {
-            const jsonData = JSON.stringify(participantData, null, 2);
-            const blob = new Blob([jsonData], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `participant_data_${participantData.id}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            try {
+                const jsonData = JSON.stringify(participantData, null, 2);
+                const blob = new Blob([jsonData], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `participant_data_${participantData.id}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                console.log("Резервное скачивание данных выполнено успешно");
+            } catch (err) {
+                console.error("Ошибка при скачивании данных:", err);
+                alert("Не удалось скачать данные. Пожалуйста, свяжитесь с организатором исследования.");
+            }
         }
 
         // --- ИНИЦИАЛИЗАЦИЯ ---

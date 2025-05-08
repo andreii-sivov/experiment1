@@ -868,7 +868,7 @@
             <h1>Исследование завершено</h1>
             <p>Благодарим за ваше участие в этом исследовании. Все собранные данные были сохранены.</p>
             <p>Ваши ответы внесут важный вклад в наше понимание восприятия научных явлений.</p>
-            <button type="button" onclick="exportData()">Скачать данные (JSON)</button>
+            <button type="button" onclick="exportData()">Отправить данные</button>
         </div>
     </div>
 
@@ -1202,7 +1202,30 @@
         }
 
         function exportData() {
-            const jsonData = JSON.stringify(participantData, null, 2); // Форматируем JSON
+            const jsonData = JSON.stringify(participantData);
+            // Показываем пользователю, что данные отправляются
+            alert("Отправка данных...");
+            fetch('https://script.google.com/macros/s/AKfycbzbUu4U29vZrop4SNi62SfyVxJ0gFwfgbnP44GRAuWXGz8Yrz2LwsSUDKcW6-a-Fn-O/exec', {
+                method: 'POST',
+                body: jsonData,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert("Данные успешно отправлены! Спасибо за участие!");
+            })
+            .catch(error => {
+                console.error('Ошибка:', error);
+                alert("Произошла ошибка при отправке. Пожалуйста, скачайте данные и отправьте их вручную.");
+                // Запасной вариант - скачать файл
+                downloadBackup();
+            });
+        }
+
+        function downloadBackup() {
+            const jsonData = JSON.stringify(participantData, null, 2);
             const blob = new Blob([jsonData], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -1212,7 +1235,6 @@
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            console.log("Данные экспортированы.");
         }
 
         // --- ИНИЦИАЛИЗАЦИЯ ---

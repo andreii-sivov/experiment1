@@ -874,7 +874,7 @@
 
     <script>
         // --- КОНФИГУРАЦИЯ ---
-        const OPENROUTER_API_KEY = "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";
+        const OPENROUTER_API_KEY = "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";
         const OPENROUTER_MODEL = "google/gemini-flash-1.5";
         const YOUR_SITE_NAME_FOR_OPENROUTER = "ExperimentStudyRu"; 
 
@@ -1240,7 +1240,7 @@
         // --- ИНИЦИАЛИЗАЦИЯ ---
         document.addEventListener('DOMContentLoaded', () => {
             logData('experiment_start', { userAgent: navigator.userAgent, timestamp: new Date().toISOString() });
-            if (OPENROUTER_API_KEY === "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" || 
+            if (OPENROUTER_API_KEY === "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" || 
                 (OPENROUTER_API_KEY && OPENROUTER_API_KEY.startsWith("sk-or-v1-"))) {
                 console.warn("ПРЕДУПРЕЖДЕНИЕ БЕЗОПАСНОСТИ: API ключ OpenRouter встроен в этот скрипт. Это только для демонстрационных целей и крайне небезопасно для любой производственной или публичной среды.");
             } else if (!OPENROUTER_API_KEY || OPENROUTER_API_KEY === "YOUR_OPENROUTER_API_KEY_HERE") {
